@@ -1,0 +1,246 @@
+openapi: 3.0.3
+
+info:
+  title: Словарь (Dictionary) API
+  description: |
+    Сервис «Словарь» — хранение и поиск переводов слов.
+
+    Поддерживаемые операции:
+    - поиск слова (`GET /api/v1/entries/search`);
+    - добавление слова (`POST /api/v1/entries`);
+    - получение списка всех слов для отладки (`GET /api/v1/entries`).
+
+    Все ошибки возвращаются в формате `{ "error": "<сообщение>" }`.
+  version: 1.0.0
+  contact:
+    name: Dictionary Team
+    email: support@dictionary.example.com
+
+servers:
+  - url: http://localhost:8080
+    description: Локальный сервер разработки
+  - url: https://api.dictionary.example.com
+    description: Продакшн
+
+tags:
+  - name: Entries
+    description: Операции над записями словаря
+
+paths:
+  /api/v1/entries/search:
+    get:
+      tags:
+        - Entries
+      summary: Поиск слова по слову
+      description: |
+        Возвращает запись словаря с указанным словом.
+        Если слово не найдено — возвращает `404` с телом `{ "error": "Word not found" }`.
+      operationId: searchEntry
+      parameters:
+        - name: word
+          in: query
+          required: true
+          description: Слово, которое нужно найти (регистрозависимый поиск, если не указано иное).
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+            example: apple
+      responses:
+        '200':
+          description: Слово найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entry'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                word: apple
+                translation: яблоко
+                createdAt: '2024-05-10T12:34:56.789Z'
+        '400':
+          description: Некорректный или отсутствующий параметр `word`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "'word' is required"
+        '404':
+          description: Слово не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Word not found
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Internal server error
+
+  /api/v1/entries:
+    post:
+      tags:
+        - Entries
+      summary: Добавить слово
+      description: |
+        Создаёт новую запись словаря.
+        Если слово уже существует — возвращает `409` с телом `{ "error": "Word already exists" }`.
+      operationId: createEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryInput'
+            example:
+              word: apple
+              translation: яблоко
+      responses:
+        '201':
+          description: Запись создана
+          headers:
+            Location:
+              description: URI созданной записи
+              schema:
+                type: string
+                format: uri
+                example: /api/v1/entries/3fa85f64-5717-4562-b3fc-2c963f66afa6
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entry'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                word: apple
+                translation: яблоко
+                createdAt: '2024-05-10T12:34:56.789Z'
+        '400':
+          description: Некорректное тело запроса (отсутствуют обязательные поля или неверный формат)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Field 'word' is required"
+        '409':
+          description: Слово уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Word already exists
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Internal server error
+
+    get:
+      tags:
+        - Entries
+      summary: Список всех слов
+      description: Возвращает все записи словаря (предназначено для отладки).
+      operationId: listEntries
+      responses:
+        '200':
+          description: Список записей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Entry'
+              example:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  word: apple
+                  translation: яблоко
+                  createdAt: '2024-05-10T12:34:56.789Z'
+                - id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  word: car
+                  translation: автомобиль
+                  createdAt: '2024-05-11T08:15:00.000Z'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Internal server error
+
+components:
+  schemas:
+    Entry:
+      type: object
+      description: Запись словаря
+      required:
+        - id
+        - word
+        - translation
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Уникальный идентификатор записи
+          readOnly: true
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        word:
+          type: string
+          description: Слово, которое ищем (уникальное)
+          minLength: 1
+          maxLength: 255
+          example: apple
+        translation:
+          type: string
+          description: Перевод слова
+          minLength: 1
+          maxLength: 500
+          example: яблоко
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата и время создания записи
+          readOnly: true
+          example: '2024-05-10T12:34:56.789Z'
+
+    EntryInput:
+      type: object
+      description: Данные для создания записи
+      required:
+        - word
+        - translation
+      properties:
+        word:
+          type: string
+          description: Слово, которое ищем (уникальное)
+          minLength: 1
+          maxLength: 255
+          example: apple
+        translation:
+          type: string
+          description: Перевод слова
+          minLength: 1
+          maxLength: 500
+          example: яблоко
+
+    Error:
+      type: object
+      description: Стандартный ответ с ошибкой
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Текст сообщения об ошибке
+          example: Word not found

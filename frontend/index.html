@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Словарь</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      max-width: 720px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #222;
+    }
+    h1 { margin-bottom: 1rem; }
+    h2 { font-size: 1.1rem; margin: 0 0 .75rem; }
+    section { margin-bottom: 1.5rem; }
+    .row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
+    input {
+      padding: .5rem .6rem;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      font-size: 1rem;
+      flex: 1 1 180px;
+    }
+    button {
+      padding: .5rem 1rem;
+      border: 1px solid #2a6df4;
+      background: #2a6df4;
+      color: #fff;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:hover { background: #1f57c8; }
+    button.secondary {
+      background: #fff;
+      color: #2a6df4;
+    }
+    button.secondary:hover { background: #eef3ff; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 1.5rem 0; }
+    .message {
+      min-height: 1.4em;
+      font-weight: 600;
+      padding: .25rem 0;
+    }
+    .message.success { color: #1a7f37; }
+    .message.error { color: #c02626; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .95rem;
+    }
+    th, td {
+      text-align: left;
+      padding: .4rem .5rem;
+      border-bottom: 1px solid #eee;
+      vertical-align: top;
+    }
+    th { background: #f6f7f9; }
+    td.mono { font-family: ui-monospace, monospace; font-size: .85rem; color: #555; }
+  </style>
+</head>
+<body>
+
+  <h1>Словарь</h1>
+
+  <!-- Поиск -->
+  <section>
+    <h2>Поиск слова</h2>
+    <div class="row">
+      <input type="text" id="searchWord" placeholder="Слово" autocomplete="off">
+      <button id="searchBtn" type="button">Найти</button>
+    </div>
+    <div id="searchResult" class="message" role="status" aria-live="polite"></div>
+  </section>
+
+  <hr>
+
+  <!-- Добавление -->
+  <section>
+    <h2>Добавить слово</h2>
+    <div class="row">
+      <input type="text" id="addWord" placeholder="Слово" autocomplete="off" maxlength="255">
+      <input type="text" id="addTranslation" placeholder="Перевод" autocomplete="off">
+      <button id="addBtn" type="button">Добавить слово</button>
+    </div>
+    <div id="addResult" class="message" role="status" aria-live="polite"></div>
+  </section>
+
+  <hr>
+
+  <!-- Список -->
+  <section>
+    <div class="row" style="align-items:center; justify-content:space-between;">
+      <h2 style="margin:0;">Все слова в БД</h2>
+      <button id="refreshBtn" class="secondary" type="button">Обновить список</button>
+    </div>
+    <div id="listError" class="message" role="status" aria-live="polite"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Слово</th>
+          <th>Перевод</th>
+          <th>Создано</th>
+        </tr>
+      </thead>
+      <tbody id="listBody">
+        <tr><td colspan="3">Загрузка…</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+<script>
+  // API вызывается по относительным путям: nginx проксирует /api/ на http://backend:8000
+  // (см. frontend/nginx.conf). Если открываете файл отдельно от контейнера —
+  // пропишите здесь полный адрес, например: 'http://localhost:8000'
+  const API_BASE = '';
+
+  const searchWordInput = document.getElementById('searchWord');
+  const searchBtn = document.getElementById('searchBtn');
+  const searchResult = document.getElementById('searchResult');
+
+  const addWordInput = document.getElementById('addWord');
+  const addTranslationInput = document.getElementById('addTranslation');
+  const addBtn = document.getElementById('addBtn');
+  const addResult = document.getElementById('addResult');
+
+  const refreshBtn = document.getElementById('refreshBtn');
+  const listBody = document.getElementById('listBody');
+  const listError = document.getElementById('listError');
+
+  function showMessage(el, text, type) {
+    el.textContent = text;
+    el.classList.remove('success', 'error');
+    if (type) el.classList.add(type);
+  }
+
+  function clearMessage(el) {
+    el.textContent = '';
+    el.classList.remove('success', 'error');
+  }
+
+  // ---------- Поиск ----------
+  async function search() {
+    const word = searchWordInput.value.trim();
+    clearMessage(searchResult);
+
+    if (!word) {
+      showMessage(searchResult, 'Введите слово для поиска', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/v1/entries/search?word=${encodeURIComponent(word)}`
+      );
+
+      if (res.status === 200) {
+        const entry = await res.json();
+        showMessage(searchResult, `Перевод: ${entry.translation}`, 'success');
+      } else if (res.status === 404) {
+        showMessage(searchResult, 'Слова нет в словаре', 'error');
+      } else {
+        showMessage(searchResult, 'Ошибка сервера', 'error');
+      }
+    } catch (e) {
+      showMessage(searchResult, 'Ошибка сервера', 'error');
+    }
+  }
+
+  // ---------- Добавление ----------
+  async function addEntry() {
+    const word = addWordInput.value.trim();
+    const translation = addTranslationInput.value.trim();
+    clearMessage(addResult);
+
+    if (!word || !translation) {
+      showMessage(addResult, 'Заполните слово и перевод', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/entries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word, translation }),
+      });
+
+      if (res.status === 201) {
+        showMessage(addResult, 'Слово добавлено', 'success');
+        addWordInput.value = '';
+        addTranslationInput.value = '';
+        await loadList();
+      } else if (res.status === 409) {
+        showMessage(addResult, 'Такое слово уже есть', 'error');
+      } else if (res.status === 400 || res.status === 422) {
+        // FastAPI/Pydantic возвращает detail; спецификация — {error: "..."}
+        let text = 'Ошибка запроса';
+        try {
+          const body = await res.json();
+          if (typeof body.error === 'string') {
+            text = body.error;
+          } else if (typeof body.detail === 'string') {
+            text = body.detail;
+          } else if (Array.isArray(body.detail)) {
+            text = body.detail.map(d => d.msg).join('; ');
+          }
+        } catch (_) { /* тело не JSON */ }
+        showMessage(addResult, text, 'error');
+      } else {
+        showMessage(addResult, 'Ошибка сервера', 'error');
+      }
+    } catch (e) {
+      showMessage(addResult, 'Ошибка сервера', 'error');
+    }
+  }
+
+  // ---------- Список ----------
+  function renderRows(entries) {
+    listBody.textContent = '';
+
+    if (!entries.length) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 3;
+      td.textContent = 'Словарь пуст';
+      tr.appendChild(td);
+      listBody.appendChild(tr);
+      return;
+    }
+
+    for (const entry of entries) {
+      const tr = document.createElement('tr');
+
+      const wordTd = document.createElement('td');
+      wordTd.textContent = entry.word;
+
+      const translationTd = document.createElement('td');
+      translationTd.textContent = entry.translation;
+
+      const createdTd = document.createElement('td');
+      createdTd.className = 'mono';
+      const d = new Date(entry.created_at);
+      createdTd.textContent = isNaN(d.getTime()) ? entry.created_at : d.toLocaleString();
+
+      tr.append(wordTd, translationTd, createdTd);
+      listBody.appendChild(tr);
+    }
+  }
+
+  async function loadList() {
+    clearMessage(listError);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/entries`);
+      if (res.status !== 200) {
+        throw new Error('bad status');
+      }
+      const entries = await res.json();
+      renderRows(entries);
+    } catch (e) {
+      listBody.textContent = '';
+      showMessage(listError, 'Ошибка сервера', 'error');
+    }
+  }
+
+  // ---------- События ----------
+  searchBtn.addEventListener('click', search);
+  searchWordInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') search();
+  });
+
+  addBtn.addEventListener('click', addEntry);
+  addTranslationInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addEntry();
+  });
+
+  refreshBtn.addEventListener('click', loadList);
+
+  // Первичная загрузка списка
+  loadList();
+</script>
+</body>
+</html>
